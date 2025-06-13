@@ -6,7 +6,6 @@
 时钟: com.android.deskclock
 邮箱: com.android.email
 文件管理: com.android.fileexplorer
-短信: com.android.mms
 下载管理: com.android.providers.downloads.ui
 设置: com.android.settings
 录音机: com.android.soundrecorder
@@ -60,3 +59,5 @@ WPS Office: cn.wps.moffice_eng
 闲鱼: com.taobao.idlefish
 小红书: com.xingin.xhs
 铁路12306: com.MobileTicket
+手机短信: com.android.mms
+京东: com.jingdong.app.mall

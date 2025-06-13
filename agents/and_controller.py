@@ -129,6 +129,11 @@ class AndroidController:
             return result
         return result
 
+    def launch_app(self, app_activity):
+        adb_command = f"adb -s {self.device} shell monkey -p {app_activity} -c android.intent.category.LAUNCHER 1"
+        ret = execute_adb(adb_command)
+        return ret
+
     def back(self):
         adb_command = f"adb -s {self.device} shell input keyevent KEYCODE_BACK"
         ret = execute_adb(adb_command)

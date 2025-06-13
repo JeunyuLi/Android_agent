@@ -3,9 +3,9 @@ from agents.android_agent import launch_app_node, back_to_human_node
 
 @pytest.mark.parametrize("task, expected", [("帮我打开12306买张高铁票", True),
                                             ("打开小红书", True),
-                                            ("去哔哩哔哩", True),
+                                            ("打开百度贴吧", False),
                                             ("帮我打开百度地图", True),
-                                            ("帮我打开闲鱼APP", True)])
+                                            ("帮我打开唯品会APP", False)])
 @pytest.mark.repeat(10)
 def test_launch_app_node(task, expected):
     # assert add(task, b) == expected

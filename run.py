@@ -25,7 +25,7 @@ def run_task(task: str, device: str) -> bool:
 
 if __name__ == "__main__":
     # task = "帮我浏览抖音短视频，不断向上滑动以切换到下一个视频"
-    task = "帮我拍两张照片"
+    task = "帮我给john发条手机短信，和他说hello"
     # device = "10.39.52.148:5555"
     result = run_task(task, configs["DEVICE_IP"])
     print(f"Task execution result: {result}")

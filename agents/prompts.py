@@ -49,7 +49,7 @@ self_explore_task_template = PromptTemplate(input_variables=["task_description",
                                             template=self_explore_task_template_str)
 
 self_explore_reflect_template_str = """I will give you screenshots of a mobile app before and after {action} the UI 
-element labeled with the number '{ui_element}' on the first screenshot. The numeric tag of each element is located at 
+element labeled with the number 'ui_element' on the first screenshot. The numeric tag of each element is located at 
 the center of the element. The action of {action} this UI element was described as follows:
 {last_act}
 The action was also an attempt to proceed with a larger task, which is to {task_desc}. Your job is to carefully analyze 
@@ -94,9 +94,34 @@ Documentation: <describe the function of the UI element>
 self_explore_reflect_template = PromptTemplate(input_variables=["action", "task_desc", "last_act", "ui_element"],
                                                template=self_explore_reflect_template_str)
 
-check_task_finished_template_str = """You are an agent that is trained to complete certain tasks on a smartphone. 
-You need to check whether the task has already been completed. 
-You will receive the task description provided by the user, as well as a record of the operations you have already completed. 
-Please determine whether the operation task given by the user has been completed based on the operation record.
-If you believe the task has already been completed, simply output FINISHED. Otherwise, output CONTINUE. 
-You are only allowed to output these two options."""
+check_task_finished_template_str = """You are an agent responsible for determining whether a given task on a smartphone has been completed.
+
+Carefully review the operation history and determine whether the task described above has been successfully completed.
+
+Your output must be one of the following:
+- FINISHED (if the task was completed)
+- CONTINUE (if the task is still in progress or incomplete)
+
+Do not output any additional explanation, reasoning, or text. Only return either "FINISHED" or "CONTINUE".
+"""
+
+launch_app_template_str = """The task you need to complete is to {task_description}. 
+
+Below is a list of applications already installed on the device:
+{app_list}
+
+Please conduct a comprehensive analysis and recommend one application that best fulfills the user's intent. 
+Your output must strictly adhere to the following rules:
+
+1. Only select an app if it directly matches the task description.
+2. If none of the apps can fulfill the task, return: `APP: No application opened`.
+3. You must only launch one application at a time.
+4. Your decision should be based solely on the application names and their relevance to the task.
+5. Do not make up any application name or infer packages from the name.
+
+Format your response exactly as follows:
+APP: <Application package name or "No application opened">
+Action: <Brief explanation of why this app was selected or why no app could be launched>
+"""
+launch_app_template = PromptTemplate(input_variables=["task_description", "app_list"],
+                                     template=launch_app_template_str)

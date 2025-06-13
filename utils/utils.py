@@ -3,10 +3,12 @@ import cv2
 import pyshine as ps
 import io
 from PIL import Image as PILImage
+import re
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use('TkAgg')
-
+from langchain_core.output_parsers import BaseOutputParser
+from pydantic import BaseModel, Field
 from colorama import Fore, Style
 
 
@@ -113,3 +115,92 @@ def show_graph(compiled_graph):
     plt.imshow(image)
     plt.axis('off')  # 关闭坐标轴
     plt.show()
+
+def parse_explore_rsp(rsp):
+    try:
+        observation = re.findall(r"Observation: (.*?)$", rsp, re.MULTILINE)[0]
+        think = re.findall(r"Thought: (.*?)$", rsp, re.MULTILINE)[0]
+        act = re.findall(r"Action: (.*?)$", rsp, re.MULTILINE)[0]
+        last_act = re.findall(r"Summary: (.*?)$", rsp, re.MULTILINE)[0]
+        print_with_color("Observation:", "yellow")
+        print_with_color(observation, "magenta")
+        print_with_color("Thought:", "yellow")
+        print_with_color(think, "magenta")
+        print_with_color("Action:", "yellow")
+        print_with_color(act, "magenta")
+        print_with_color("Summary:", "yellow")
+        print_with_color(last_act, "magenta")
+        if "FINISH" in act:
+            return ["FINISH"]
+        act_name = act.split("(")[0]
+        if act_name == "tap":
+            area = int(re.findall(r"tap\((.*?)\)", act)[0])
+            return [act_name, area, last_act]
+        elif act_name == "text":
+            input_str = re.findall(r"text\((.*?)\)", act)[0][1:-1]
+            return [act_name, input_str, last_act]
+        elif act_name == "long_press":
+            area = int(re.findall(r"long_press\((.*?)\)", act)[0])
+            return [act_name, area, last_act]
+        elif act_name == "swipe":
+            params = re.findall(r"swipe\((.*?)\)", act)[0]
+            area, swipe_dir, dist = params.split(",")
+            area = int(area)
+            swipe_dir = swipe_dir.strip()[1:-1]
+            dist = dist.strip()[1:-1]
+            return [act_name, area, swipe_dir, dist, last_act]
+        elif act_name == "grid":
+            return [act_name]
+        else:
+            print_with_color(f"ERROR: Undefined act {act_name}!", "red")
+            return ["ERROR"]
+    except Exception as e:
+        print_with_color(f"ERROR: an exception occurs while parsing the model response: {e}", "red")
+        print_with_color(rsp, "red")
+        return ["ERROR"]
+
+def parse_reflect_rsp(rsp):
+    try:
+        decision = re.findall(r"Decision: (.*?)$", rsp, re.MULTILINE)[0]
+        think = re.findall(r"Thought: (.*?)$", rsp, re.MULTILINE)[0]
+        print_with_color("Decision:", "yellow")
+        print_with_color(decision, "magenta")
+        print_with_color("Thought:", "yellow")
+        print_with_color(think, "magenta")
+        decision = decision.replace(" ", "")
+        if decision == "INEFFECTIVE":
+            return [decision, think]
+        elif decision == "BACK" or decision == "CONTINUE" or decision == "SUCCESS":
+            doc = re.findall(r"Documentation: (.*?)$", rsp, re.MULTILINE)[0]
+            print_with_color("Documentation:", "yellow")
+            print_with_color(doc, "magenta")
+            return [decision, think, doc]
+        else:
+            print(f"decision = {decision}")
+            print_with_color(f"ERROR: Undefined decision {decision}!", "red")
+            return ["ERROR"]
+    except Exception as e:
+        print_with_color(f"ERROR: an exception occurs while parsing the model response: {e}", "red")
+        print_with_color(rsp, "red")
+        return ["ERROR"]
+
+
+
+class AppLaunchOutput(BaseModel):
+    app_name: str = Field(description="Name of the application to launch")
+    action: str = Field(description="Explanation of the action taken")
+
+class AppLaunchOutputParser(BaseOutputParser):
+    def parse(self, text: str) -> AppLaunchOutput:
+        lines = text.strip().split('\n')
+        app_line = next(line for line in lines if line.startswith("APP:"))
+        action_line = next(line for line in lines if line.startswith("Action:"))
+
+        return AppLaunchOutput(
+            app_name=app_line[len("APP:"):].strip(),
+            action=action_line[len("Action:"):].strip()
+        )
+
+    @property
+    def _type(self) -> str:
+        return "app_launch_output"

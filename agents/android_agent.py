@@ -14,7 +14,7 @@ from langchain_community.chat_message_histories import ChatMessageHistory
 from agents.and_controller import AndroidController, execute_adb, traverse_tree
 from utils import print_with_color, draw_bbox_multi, encode_image
 from agents.state import ControlState
-from agents.model import parse_explore_rsp, parse_reflect_rsp
+from utils import parse_explore_rsp, parse_reflect_rsp, AppLaunchOutputParser
 from agents import prompts
 from configs import load_config
 configs = load_config()
@@ -55,80 +55,37 @@ def launch_app_node(state: ControlState):
     ret = execute_adb(adb_command)
     installed_app = ret.split('\n')
     # 应用名与启动包对应的列表
-    # app2package = {p.split('.')[-1]: p.split(":")[-1] for p in installed_app}
     app2package = {p.split(":")[-1].replace("com.", ""): p.split(":")[-1] for p in installed_app}
     # 读取映射表
     with open(configs["APP_MAPPING_FILE"], "r", encoding="utf-8") as f:
         app_mapping = yaml.safe_load(f)
-    app2package.update(app_mapping)
+    # 删掉当前没有安装的app
+    for app, activity in app_mapping.items():
+        if activity in app2package.values():
+            app2package[app] = activity
 
-    # create launch agent for app launch
-    @tool
-    def launch_app_action(device: str, app_name: str):
-        """
-        Tool name: launch_app_action
+    prompt = prompts.launch_app_template
+    chain = prompt | mllm | AppLaunchOutputParser()
+    response = chain.invoke({"task_description": state["task_desc"],
+                             "app_list": str(app2package.keys())})
 
-        Tool function:
-            Launch an application on a mobile device.
-
-        Parameters:
-            - device (str): Specify the target device ID
-            - app_name (str): Name of the application to launch
-
-        Returns:
-            Returns a JSON string including the following fields:
-            - "status": "success" or "error"
-            - "action": Type of operation performed
-            - "device": Device ID
-            - Other fields appended according to the operation type.
-        """
-        try:
-            adb_command = f"adb -s {device} shell monkey -p {app2package[app_name]} -c android.intent.category.LAUNCHER 1"
-            result_data = {"action": f"launch {app_name}", "device": device}
-            ret = execute_adb(adb_command)
-            if ret is not None and "ERROR" not in ret.upper():
-                result_data["status"] = "success"
-            else:
-                result_data["status"] = "error"
-                result_data["message"] = f"ADB command execution failed: {ret}"
-
-            return json.dumps(result_data, ensure_ascii=False)
-        except Exception as e:
-            return json.dumps(
-                {"status": "error", "action": f"launch {app_name}", "device": device, "message": str(e)},
-                ensure_ascii=False,
-            )
-
-    launch_agent = create_react_agent(mllm.bind_tools([launch_app_action]), [launch_app_action])
-
-    # build messages
-    messages = [
-        SystemMessage(
-            content=f"""Below is a list of applications already installed on the device and the user's intent. 
-            Please conduct a comprehensive analysis and recommend opening one of the applications to fulfill the user's intent 
-            (please only open the one application that best meets the user's intent), and complete it by calling a tool. 
-            Opening the application must be done through a tool calling instead of returning a JSON. Only execute one tool call.
-            Please try to find an application that matches the user's intent as much as possible.
-            If you cannot find an application that matches the user's intent, please directly return "No application opened."
-            All tool calls must include device information to specify the device being operated on. """
-        ), # If you cannot find an application that matches the user's intent, please directly return "No application opened."
-        HumanMessage(
-            content=f"The current device is: {state['device_ip']}. The user's current task intent is: {state['task_desc']}"
-        ),
-        HumanMessage(
-            content="Below is a list of applications already installed on the device :\n"
-                    + str(list(app2package.keys()))
-        ),
-    ]
-
-    launch_result = launch_agent.invoke({"messages": messages})
-
-    final_messages = launch_result.get("messages", [])
-    print_with_color(final_messages[-1].content, "blue")
-    operation_history.add_ai_message(final_messages[-1].content)
-    if isinstance(final_messages[-2], ToolMessage) and json.loads(final_messages[-2].content).get('status') != "error":
+    if response.app_name in app2package:
+        print_with_color(f"Launching {response.app_name}...", "yellow")
+        controller.launch_app(app2package[response.app_name])
+        operation_history.add_ai_message(response.action)
         state["app_launched"] = True
-        state["last_act"] = final_messages[-1].content
+        state["last_act"] = response.action
+    elif "No application opened" in response.app_name:
+        print_with_color(f"ERROR: {response.app_name} is not installed!", "red")
+        operation_history.add_ai_message(response.action)
+        state["app_launched"] = False
+        state["last_act"] = response.action
+    else:
+        print_with_color(f"ERROR: {response.app_name} is not installed!", "red")
+        operation_history.add_ai_message(response.action)
+        state["app_launched"] = False
+        state["last_act"] = response.action
+
     return state
 
 def capture_screen_node(state: ControlState):
@@ -433,12 +390,11 @@ def fallback_node(state: ControlState):
 
 def check_task_completion_node(state: ControlState):
     # build message
-    messages = [
-        SystemMessage(
-            content=prompts.check_task_finished_template_str
-        ),
-    ]
+    messages = []
     messages.extend(operation_history.messages)
+    messages.append(SystemMessage(
+            content=prompts.check_task_finished_template_str
+        ),)
     res = mllm.invoke(messages).content
     if "FINISHED" in res:
         state["completed"] = True
