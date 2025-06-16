@@ -29,6 +29,11 @@ class Reflect_rsp(BaseModel):
     Thought: str = Field(..., description="The thought process that led to the decision")
     Documentation: str = Field(..., description="The documentation of the decision")
 
+class AppLaunch_rsp(BaseModel):
+    app_name: str = Field(description="Name of the application to launch")
+    action: str = Field(description="Explanation of the action taken")
+
+
 class Lang_Azure(LLMBaseModel):
     def __init__(self, base_url: str, api_key: str, api_version: str, model: str, temperature: float, max_tokens: int):
         super().__init__()
@@ -38,7 +43,7 @@ class Lang_Azure(LLMBaseModel):
         self.temperature = temperature
         self.max_tokens = max_tokens
         # 实例化模型
-        self.exp_model = AzureChatOpenAI(
+        self.mllm = AzureChatOpenAI(
             azure_endpoint=self.base_url,
             api_key=self.api_key,
             api_version=api_version,  # 假设使用固定版本，可根据需要修改
@@ -47,18 +52,7 @@ class Lang_Azure(LLMBaseModel):
             request_timeout=500,
             max_retries=3,
             max_tokens=self.max_tokens,
-        ).with_structured_output(Explore_rsp)
-
-        self.ref_model = AzureChatOpenAI(
-            azure_endpoint=self.base_url,
-            api_key=self.api_key,
-            api_version=api_version,  # 假设使用固定版本，可根据需要修改
-            model_name=self.model_name,
-            deployment_name=self.model_name,
-            request_timeout=500,
-            max_retries=3,
-            max_tokens=self.max_tokens,
-        ).with_structured_output(Reflect_rsp)
+        )
 
     def get_model_response(self, prompt: str, images: List[str]) -> (bool, str):
         try:
@@ -74,11 +68,22 @@ class Lang_Azure(LLMBaseModel):
             message = HumanMessage(
                 content=content
             )
-
-            res = self.model.invoke([message])
+            res = self.mllm.invoke([message])
             return True, res.content
         except Exception as e:
             return False, str(e)
+
+    def get_app_launch_rsp(self, task_desc, app_list) -> AppLaunch_rsp:
+        try:
+            prompt_temp = prompts.launch_app_template
+            app_launch_model = self.mllm.with_structured_output(AppLaunch_rsp)
+            chain = prompt_temp | app_launch_model
+            res: AppLaunch_rsp = chain.invoke({"task_description": task_desc,
+                                               "app_list": app_list})
+            return res
+        except Exception as e:
+            print_with_color(f"ERROR: {e}", "red")
+            return AppLaunch_rsp(app_name="No application opened", action="ERROR")
 
     def get_explor_rsp(self, task_desc, last_act, images: List[str]) -> (list):
         try:
@@ -97,8 +102,9 @@ class Lang_Azure(LLMBaseModel):
                 content=content
             )
             # 基于langchain的结构化输出
+            exp_model = self.mllm.with_structured_output(Explore_rsp)
             # parser = JsonOutputParser(pydantic_object=Explore_rsp)
-            res: Explore_rsp = self.exp_model.invoke([message])
+            res: Explore_rsp = exp_model.invoke([message])
             # res_dict = parser.parse_result(res)
 
             observation = res.Observation
@@ -189,14 +195,15 @@ class Lang_Azure(LLMBaseModel):
             )
 
             print_with_color("Reflecting on my previous action...", "yellow")
-            res: Reflect_rsp = self.ref_model.invoke([message])
+            ref_model = self.mllm.with_structured_output(Reflect_rsp)
+            res: Reflect_rsp = ref_model.invoke([message])
 
             decision = res.Decision
             think = res.Thought
             doc = res.Documentation
         except Exception as e:
             print_with_color(f"ERROR: {e}", "red")
-            raise  e
+            raise e
 
         if decision == "INEFFECTIVE":
             return [decision, think]

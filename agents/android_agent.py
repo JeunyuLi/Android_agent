@@ -16,6 +16,7 @@ from utils import print_with_color, draw_bbox_multi, encode_image
 from agents.state import ControlState
 from utils import parse_explore_rsp, parse_reflect_rsp, AppLaunchOutputParser
 from agents import prompts
+from agents import Lang_Azure
 from configs import load_config
 configs = load_config()
 mllm = AzureChatOpenAI(
@@ -27,6 +28,13 @@ mllm = AzureChatOpenAI(
     request_timeout=500,
     max_tokens=configs["MAX_TOKENS"],
 )
+lang_mllm = Lang_Azure(base_url=configs["OPENAI_API_BASE"],
+                       api_key=configs["OPENAI_API_KEY"],
+                       api_version=configs["OPENAI_API_VERSION"],
+                       model=configs["MODEL"],
+                       temperature=0,
+                       max_tokens=configs["MAX_TOKENS"])
+
 operation_history = ChatMessageHistory()
 
 controller = AndroidController(configs["DEVICE_IP"])
@@ -40,6 +48,11 @@ def init_node(state: ControlState):
     print_with_color(f"Screen resolution of {state['device_ip']}: {width}x{height}", "yellow")
     state["screen_width"] = width
     state["screen_height"] = height
+
+    # 新建工作文件夹
+    controller.android_mkdir(configs["ANDROID_SCREENSHOT_DIR"])
+    controller.android_mkdir(configs["ANDROID_XML_DIR"])
+
 
     # 将用户的操作需求添加进历史记录
     operation_history.add_user_message(state["task_desc"])
@@ -194,7 +207,7 @@ def think_next_step_node(state: ControlState):
     print_with_color("Thinking about what to do in the next step...", "yellow")
     start_time = time.time()
     # TODO: 待优化成langchain结构化输出
-    # res = mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"], images=[base64_img_before])
+    res = mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"], images=[base64_img_before])
     content = [{"type": "text", "text": prompt}]
     base64_img = encode_image(base64_img_before)
     content.append({

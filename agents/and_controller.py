@@ -94,6 +94,12 @@ class AndroidController:
         self.width, self.height = self.get_device_size()
         self.backslash = "\\"
 
+    def android_mkdir(self, path):
+        check_exist_command = f"adb -s {self.device} shell ls {path}"
+        if execute_adb(check_exist_command) == "ERROR":
+            mkdir_command = f"adb -s {self.device} shell mkdir {path}"
+            result = execute_adb(mkdir_command)
+
     def get_device_size(self):
         adb_command = f"adb -s {self.device} shell wm size"
         result = execute_adb(adb_command)
