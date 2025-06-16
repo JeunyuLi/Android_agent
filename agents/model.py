@@ -4,7 +4,9 @@ from typing import List
 from http import HTTPStatus
 import requests
 from langchain_openai import AzureChatOpenAI
-from langchain.schema.messages import HumanMessage
+from langchain.schema.messages import HumanMessage, SystemMessage
+from langchain_community.chat_message_histories import ChatMessageHistory
+
 from pydantic import BaseModel, Field
 
 from agents import prompts
@@ -215,3 +217,14 @@ class Lang_Azure(LLMBaseModel):
             print(f"decision = {decision}")
             print_with_color(f"ERROR: Undefined decision {decision}!", "red")
             return ["ERROR"]
+
+    def check_task_completion(self, operation_history: ChatMessageHistory):
+        # build message
+        messages = []
+        messages.extend(operation_history.messages)
+        messages.append(SystemMessage(
+            content=prompts.check_task_finished_template_str
+        ), )
+        res = self.mllm.invoke(messages).content
+
+        return res

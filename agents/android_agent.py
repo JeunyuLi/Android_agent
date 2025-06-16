@@ -16,7 +16,7 @@ from utils import print_with_color, draw_bbox_multi, encode_image
 from agents.state import ControlState
 from utils import parse_explore_rsp, parse_reflect_rsp, AppLaunchOutputParser
 from agents import prompts
-from agents import Lang_Azure
+from agents import Lang_Azure, Explore_rsp, Reflect_rsp, AppLaunch_rsp
 from configs import load_config
 configs = load_config()
 mllm = AzureChatOpenAI(
@@ -40,6 +40,20 @@ operation_history = ChatMessageHistory()
 controller = AndroidController(configs["DEVICE_IP"])
 
 def init_node(state: ControlState):
+    """
+    Initialize the control state for the Android agent.
+    
+    This function performs the following tasks:
+    1. Retrieves the screen resolution of the device.
+    2. Creates necessary working directories on the Android device.
+    3. Adds the user's task description to the operation history.
+    
+    Parameters:
+    - state (ControlState): The current state of the control, including device IP and task description.
+    
+    Returns:
+    - state (ControlState): The updated state with screen resolution and other initialized parameters.
+    """
     # 获取wh
     width, height = controller.get_device_size()
     if not width and not height:
@@ -60,6 +74,21 @@ def init_node(state: ControlState):
     return state
 
 def launch_app_node(state: ControlState):
+    """
+    Launches the appropriate application based on the task description.
+    
+    This function performs the following tasks:
+    1. Retrieves the list of installed applications on the device.
+    2. Maps the application names to their corresponding package names.
+    3. Uses a language model to determine which application to launch based on the task description.
+    4. Launches the selected application using the Android controller.
+    
+    Parameters:
+    - state (ControlState): The current state of the control, including device IP and task description.
+    
+    Returns:
+    - state (ControlState): The updated state with information about the launched application.
+    """
     print("🚀 Launching application...")
 
     # controller.home() # 回桌面
@@ -77,10 +106,11 @@ def launch_app_node(state: ControlState):
         if activity in app2package.values():
             app2package[app] = activity
 
-    prompt = prompts.launch_app_template
-    chain = prompt | mllm | AppLaunchOutputParser()
-    response = chain.invoke({"task_description": state["task_desc"],
-                             "app_list": str(app2package.keys())})
+    # prompt = prompts.launch_app_template
+    # chain = prompt | mllm | AppLaunchOutputParser()
+    # response = chain.invoke({"task_description": state["task_desc"],
+    #                          "app_list": str(app2package.keys())})
+    response = lang_mllm.get_app_launch_rsp(state["task_desc"], app2package.keys())
 
     if response.app_name in app2package:
         print_with_color(f"Launching {response.app_name}...", "yellow")
@@ -102,6 +132,19 @@ def launch_app_node(state: ControlState):
     return state
 
 def capture_screen_node(state: ControlState):
+    """
+    Captures a screenshot of the current page.
+    
+    This function performs the following tasks:
+    1. Saves the previous screenshot (if any) as the last page screenshot.
+    2. Captures a new screenshot of the current page.
+    
+    Parameters:
+    - state (ControlState): The current state of the control, including device IP and task description.
+    
+    Returns:
+    - output_state (dict): A dictionary containing the last and current page screenshots.
+    """
     output_state = dict()
     if state["current_page_screenshot"]:
         output_state["last_page_screenshot"] = state["current_page_screenshot"]
@@ -109,7 +152,23 @@ def capture_screen_node(state: ControlState):
     return output_state
 
 def element_extract_node(state: ControlState):
+    """
+    Extracts UI elements from the current page's XML and manages element labeling for interaction.
 
+    This function performs the following tasks:
+    1. Retrieves the XML structure of the current UI page.
+    2. Parses the XML to extract clickable and focusable UI elements.
+    3. Filters out previously identified useless elements to avoid redundant interactions.
+    4. Eliminates overlapping or closely positioned elements based on a distance threshold.
+    5. Maintains historical element lists for comparison across steps.
+    6. Draws bounding boxes around labeled elements on screenshots for visualization.
+
+    Parameters:
+    - state (ControlState): The current control state containing device status, UI elements, and task context.
+
+    Returns:
+    - state (ControlState): Updated state with extracted UI elements and labeled screenshot paths.
+    """
     state["xml_path"] = controller.get_xml(f"{state['round_count']}", state["task_dir"])
     if state["current_page_screenshot"] == "ERROR" or state["xml_path"] == "ERROR":
         raise Exception("截图或XML获取失败")
@@ -165,7 +224,6 @@ def back_to_human_node(state: ControlState):
     base64_img_before = state["current_page_screenshot_draw"]
     print_with_color("Thinking about what to do in the next step...", "yellow")
     start_time = time.time()
-    # TODO: 待优化成langchain结构化输出
     # res = mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"], images=[base64_img_before])
     base64_img = encode_image(base64_img_before)
 
@@ -200,30 +258,16 @@ def back_to_human_node(state: ControlState):
     return output_state
 
 def think_next_step_node(state: ControlState):
+
     output_state = dict()
-    prompt = prompts.self_explore_task_template.format(task_description=state["task_desc"],
-                                                           last_act=state["last_act"])
     base64_img_before = state["current_page_screenshot_draw"]
     print_with_color("Thinking about what to do in the next step...", "yellow")
     start_time = time.time()
-    # TODO: 待优化成langchain结构化输出
-    res = mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"], images=[base64_img_before])
-    content = [{"type": "text", "text": prompt}]
-    base64_img = encode_image(base64_img_before)
-    content.append({
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{base64_img}"
-        }
-    })
-    message = HumanMessage(
-        content=content
-    )
-
     try:
-        rsp = mllm.invoke([message]).content
-        # exp_mllm = mllm.with_structured_output(Explore_rsp)
-        # a = exp_mllm.invoke([message])
+        # res的结构为[act_name, *act_params, last_act]
+        res = lang_mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"],
+                                        images=[base64_img_before])
+
     except Exception as e:
         print_with_color(f"大模型调用错误: {e}", "red")
         output_state["next_action"] = ["ERROR", "", f"ERROR: {e}"]
@@ -232,17 +276,12 @@ def think_next_step_node(state: ControlState):
     end_time = time.time()
     print_with_color(f"模型第一次推理耗时: {end_time - start_time:.2f}秒", "yellow")
 
-
-    # status, rsp = mllm.get_model_response(prompt, [base64_img_before], )
-    # if not status:
-    #     raise Exception(f"大模型调用错误: {rsp}")
     with open(state["explore_log_path"], "a") as logfile:
-        log_item = {"step": state["round_count"], "prompt": prompt,
+        log_item = {"step": state["round_count"], "prompt": "******************",
                     "image": f"{state['round_count']}_before_labeled.png",
-                    "response": rsp}
+                    "response": str(res)}
         logfile.write(json.dumps(log_item) + "\n")
-
-    res = parse_explore_rsp(rsp)  # res的结构为[act_name, *act_params, last_act]
+    # res的结构为[act_name, *act_params, last_act]
     # 加入操作历史中
     operation_history.add_ai_message(res[-1])
     # 如果大模型的输出超出当前屏幕上的UI元素的范围，则返回ERROR
@@ -256,11 +295,6 @@ def think_next_step_node(state: ControlState):
     return output_state
 
 def fallback_node(state: ControlState):
-    """
-    Used to check whether the last app operation was successful.
-    :param state:
-    :return:
-    """
     output_state = dict()
     output_state["fallback_decision"] = state["fallback_decision"]
     output_state["useless_list"] = state["useless_list"]
@@ -285,70 +319,14 @@ def fallback_node(state: ControlState):
     img_before_path = state["last_page_screenshot_before_draw"]
     img_after_path = state["last_page_screenshot_after_draw"]
 
-    if act_name == "tap":
-        prompt = prompts.self_explore_reflect_template.format(action="tapping",
-                                                                  task_desc=state["task_desc"],
-                                                                  last_act=state["last_act"],
-                                                                  ui_element=str(area))
-    elif act_name == "text":
-        prompt = prompts.self_explore_reflect_template.format(action="typing",
-                                                                  task_desc=state["task_desc"],
-                                                                  last_act=state["last_act"],
-                                                                  ui_element=str(area))
-    elif act_name == "long_press":
-        prompt = prompts.self_explore_reflect_template.format(action="long pressing",
-                                                                  task_desc=state["task_desc"],
-                                                                  last_act=state["last_act"],
-                                                                  ui_element=str(area))
-    elif act_name == "swipe":
-        swipe_dir = last_res[2]
-        if swipe_dir == "up" or swipe_dir == "down":
-            act_name = "v_swipe"
-        elif swipe_dir == "left" or swipe_dir == "right":
-            act_name = "h_swipe"
-        prompt = prompts.self_explore_reflect_template.format(action=act_name,
-                                                                  task_desc=state["task_desc"],
-                                                                  last_act=state["last_act"],
-                                                                  ui_element=str(area))
-    else:
-        print_with_color("ERROR: Undefined act!", "red")
-        raise ValueError("Undefined action encountered during fallback processing.")
-
     print_with_color("Reflecting on my previous action...", "yellow")
     start_time = time.time()
-    content = [{"type": "text", "text": prompt}]
-    base64_img_before = encode_image(img_before_path)
-    base64_img_after = encode_image(img_after_path)
-    content.append({
-        "type": "image_url",
-        "image_url": {
-            "url": f"data:image/jpeg;base64,{base64_img_before}"
-        }
-    })
-    content = [{"type": "text", "text": prompt},
-               {
-                   "type": "image_url",
-                   "image_url": {
-                       "url": f"data:image/jpeg;base64,{base64_img_before}"
-                   }
-               },
-               {
-                   "type": "image_url",
-                   "image_url": {
-                       "url": f"data:image/jpeg;base64,{base64_img_after}"
-                   }
-               }
-               ]
-    message = HumanMessage(
-        content=content
-    )
     try:
-        rsp = mllm.invoke([message]).content
-        # ref_mllm = mllm.with_structured_output(Reflect_rsp)
-        # a = ref_mllm.invoke([message])
+        res = lang_mllm.get_reflect_rsp(last_res, state["task_desc"], last_res[-1], [img_before_path, img_after_path])
         status = True
     except Exception as e:
         print_with_color(f"大模型调用错误: {e}", "red")
+        res = ['ERROR', e]
         status = False
     # status, rsp = mllm.get_model_response(prompt, [img_before_path, img_after_path])
     end_time = time.time()
@@ -356,11 +334,10 @@ def fallback_node(state: ControlState):
     if status:
         resource_id = state["last_elem_list"][int(area) - 1].uid
         with open(state["reflect_log_path"], "a") as logfile:
-            log_item = {"step": state["round_count"] - 1, "prompt": prompt,
+            log_item = {"step": state["round_count"] - 1, "prompt": "******************",
                         "image_before": f"{state['round_count'] - 1}_before_labeled.png",
-                        "image_after": f"{state['round_count'] - 1}_after.png", "response": rsp}
+                        "image_after": f"{state['round_count'] - 1}_after.png", "response": res}
             logfile.write(json.dumps(log_item) + "\n")
-        res = parse_reflect_rsp(rsp)
         decision = res[0]
         output_state["fallback_decision"] = decision
         if decision == "ERROR":
@@ -397,7 +374,7 @@ def fallback_node(state: ControlState):
             return output_state
 
     else:
-        print_with_color(rsp["error"]["message"], "red")
+        print_with_color(res[-1], "red")
         output_state["fallback_decision"] = "ERROR"
         return output_state
 
