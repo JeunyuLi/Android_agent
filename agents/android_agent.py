@@ -19,15 +19,15 @@ from agents import prompts
 from agents import Lang_Azure, Explore_rsp, Reflect_rsp, AppLaunch_rsp
 from configs import load_config
 configs = load_config()
-mllm = AzureChatOpenAI(
-    azure_endpoint=configs["OPENAI_API_BASE"],
-    api_key=configs["OPENAI_API_KEY"],
-    api_version=configs["OPENAI_API_VERSION"],
-    model_name=configs["MODEL"],
-    deployment_name=configs["MODEL"],
-    request_timeout=500,
-    max_tokens=configs["MAX_TOKENS"],
-)
+# mllm = AzureChatOpenAI(
+#     azure_endpoint=configs["OPENAI_API_BASE"],
+#     api_key=configs["OPENAI_API_KEY"],
+#     api_version=configs["OPENAI_API_VERSION"],
+#     model_name=configs["MODEL"],
+#     deployment_name=configs["MODEL"],
+#     request_timeout=500,
+#     max_tokens=configs["MAX_TOKENS"],
+# )
 lang_mllm = Lang_Azure(base_url=configs["OPENAI_API_BASE"],
                        api_key=configs["OPENAI_API_KEY"],
                        api_version=configs["OPENAI_API_VERSION"],
@@ -218,50 +218,11 @@ def element_extract_node(state: ControlState):
 
     return state
 
-def back_to_human_node(state: ControlState):
-    output_state = dict()
-    prompt = prompts.human_in_the_loop_str
-    base64_img_before = state["current_page_screenshot_draw"]
-    print_with_color("Thinking about what to do in the next step...", "yellow")
-    start_time = time.time()
-    # res = mllm.get_explor_rsp(task_desc=state["task_desc"], last_act=state["last_act"], images=[base64_img_before])
-    base64_img = encode_image(base64_img_before)
-
-    content = [
-        {"type": "text", "text": prompt},
-        {"type": "image_url",
-        "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}
-         }
-    ]
-    message = HumanMessage(
-        content=content
-    )
-
-    try:
-        rsp = mllm.invoke([message]).content
-        # exp_mllm = mllm.with_structured_output(Explore_rsp)
-        # a = exp_mllm.invoke([message])
-        if "YES" in rsp:
-            output_state["human_in_the_loop_action"] = True
-        elif "NO" in rsp:
-            output_state["human_in_the_loop_action"] = False
-        print_with_color(f"大模型调用成功: {rsp}", "green")
-
-    except Exception as e:
-        print_with_color(f"大模型调用错误: {e}", "red")
-        output_state["next_action"] = ["ERROR", "", f"ERROR: {e}"]
-        return output_state
-
-    end_time = time.time()
-    print_with_color(f"判断是否需要回传人类时的模型推理耗时: {end_time - start_time:.2f}秒", "yellow")
-
-    return output_state
-
 def think_next_step_node(state: ControlState):
 
     output_state = dict()
     base64_img_before = state["current_page_screenshot_draw"]
-    print_with_color("Thinking about what to do in the next step...", "yellow")
+    print_with_color("Thinking about what to do in the next step...", "green")
     start_time = time.time()
     try:
         # res的结构为[act_name, *act_params, last_act]
@@ -319,7 +280,9 @@ def reflect_previous_action_node(state: ControlState):
     img_before_path = state["last_page_screenshot_before_draw"]
     img_after_path = state["last_page_screenshot_after_draw"]
 
-    print_with_color("Reflecting on my previous action...", "yellow")
+    print_with_color("Reflecting on my previous action...", "green")
+    # print_with_color("Reflecting on my previous action...", "red")
+
     start_time = time.time()
     try:
         res = lang_mllm.get_reflect_rsp(last_res, state["task_desc"], last_res[-1], [img_before_path, img_after_path])
@@ -385,7 +348,7 @@ def check_task_completion_node(state: ControlState):
     messages.append(SystemMessage(
             content=prompts.check_task_finished_template_str
         ),)
-    res = mllm.invoke(messages).content
+    res = lang_mllm.mllm.invoke(messages).content
     if "FINISHED" in res:
         state["completed"] = True
     elif "CONTINUE" in res:
@@ -481,6 +444,7 @@ def should_fallback(state: ControlState):
     elif state["fallback_decision"] == "ERROR":
         return "end"
     elif state["completed"]:
+        print_with_color("Task Finished", "green")
         return "end"
     else:
         return "continue"
@@ -510,14 +474,12 @@ def build_workflow() -> StateGraph:
     workflow.add_edge("element_extract", "think_next_step")
     workflow.add_edge("element_extract", "reflect")
     workflow.add_edge("think_next_step", "action")
-    workflow.add_edge("fallback", "action")
+    workflow.add_edge("reflect", "action")
 
     # routing
     workflow.add_conditional_edges("action", should_fallback,
                                    {"redone": "capture_screen", "continue": "complete", "end": END})
     workflow.add_conditional_edges("complete", is_task_completed,
                                    {"continue": "capture_screen", "end": END})
-
-
 
     return workflow

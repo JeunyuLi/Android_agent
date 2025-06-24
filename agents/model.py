@@ -196,7 +196,6 @@ class Lang_Azure(LLMBaseModel):
                 content=content
             )
 
-            print_with_color("Reflecting on my previous action...", "yellow")
             ref_model = self.mllm.with_structured_output(Reflect_rsp)
             res: Reflect_rsp = ref_model.invoke([message])
 

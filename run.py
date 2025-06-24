@@ -15,17 +15,16 @@ def run_task(task: str, device: str) -> bool:
         app = workflow.compile()
 
         # 显示langgraph 的workflow的图
-        show_graph(app)
+        # show_graph(app)
 
-        # result = app.invoke(state, {"recursion_limit": 1000})
+        result = app.invoke(state, {"recursion_limit": 1000})
         return True
     except Exception as e:
         print(f"❌ Error: {e}")
         return False
 
 if __name__ == "__main__":
-    # task = "帮我浏览抖音短视频，不断向上滑动以切换到下一个视频"
-    task = "帮我给john发条手机短信，和他说hello"
+    task = "帮我给john发条手机短信，和他说hello" # 输入任务描述
     # device = "10.39.52.148:5555"
     result = run_task(task, configs["DEVICE_IP"])
     print(f"Task execution result: {result}")
