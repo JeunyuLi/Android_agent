@@ -107,6 +107,8 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 def show_graph(compiled_graph):
+    # 获取Mermaid代码
+    graph_code = compiled_graph.get_graph().draw_mermaid()
     # 获取 Mermaid 图的字节流
     graph_bytes = compiled_graph.get_graph().draw_mermaid_png()
     # 将字节流转换为 PIL 图像

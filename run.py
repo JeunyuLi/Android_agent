@@ -15,9 +15,9 @@ def run_task(task: str, device: str) -> bool:
         app = workflow.compile()
 
         # 显示langgraph 的workflow的图
-        # show_graph(app)
+        show_graph(app)
 
-        result = app.invoke(state, {"recursion_limit": 1000})
+        # result = app.invoke(state, {"recursion_limit": 1000})
         return True
     except Exception as e:
         print(f"❌ Error: {e}")

@@ -294,7 +294,7 @@ def think_next_step_node(state: ControlState):
 
     return output_state
 
-def fallback_node(state: ControlState):
+def reflect_previous_action_node(state: ControlState):
     output_state = dict()
     output_state["fallback_decision"] = state["fallback_decision"]
     output_state["useless_list"] = state["useless_list"]
@@ -498,7 +498,7 @@ def build_workflow() -> StateGraph:
     workflow.add_node("capture_screen", capture_screen_node)
     workflow.add_node("element_extract", element_extract_node)
     workflow.add_node("think_next_step", think_next_step_node)
-    workflow.add_node("fallback", fallback_node)
+    workflow.add_node("reflect", reflect_previous_action_node)
     workflow.add_node("action", action_next_step_node)
     workflow.add_node("complete", check_task_completion_node)
 
@@ -508,7 +508,7 @@ def build_workflow() -> StateGraph:
     workflow.add_edge("launch_app", "capture_screen")
     workflow.add_edge("capture_screen", "element_extract")
     workflow.add_edge("element_extract", "think_next_step")
-    workflow.add_edge("element_extract", "fallback")
+    workflow.add_edge("element_extract", "reflect")
     workflow.add_edge("think_next_step", "action")
     workflow.add_edge("fallback", "action")
 
