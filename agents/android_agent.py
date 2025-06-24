@@ -428,8 +428,6 @@ def action_next_step_node(state: ControlState):
 
     return state
 
-
-
 def is_task_completed(state: ControlState) -> str:
     """
     Check if task is completed

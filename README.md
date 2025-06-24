@@ -17,8 +17,8 @@
 conda create -n android_agent python=3.10
 conda activate android_agent
 
-git clone 
-cd 
+git clone https://github.com/JeunyuLi/Android_agent.git
+cd Android_agent
 pip install -r requirements.txt
 ```
 
