@@ -26,9 +26,9 @@ pip install -r requirements.txt
 
 #### 1. Download ADB and install
 
-Windows version：[https://dl.google.com/android/repository/platform-tools-latest-windows.zip](https://dl.google.com/android/repository/platform-tools-latest-windows.zip)
-Mac version：[https://dl.google.com/android/repository/platform-tools-latest-darwin.zip](https://dl.google.com/android/repository/platform-tools-latest-darwin.zip)
-Linux version：[https://dl.google.com/android/repository/platform-tools-latest-linux.zip](https://dl.google.com/android/repository/platform-tools-latest-linux.zip)
+Windows version：[https://dl.google.com/android/repository/platform-tools-latest-windows.zip](https://dl.google.com/android/repository/platform-tools-latest-windows.zip) <br>
+Mac version：[https://dl.google.com/android/repository/platform-tools-latest-darwin.zip](https://dl.google.com/android/repository/platform-tools-latest-darwin.zip) <br>
+Linux version：[https://dl.google.com/android/repository/platform-tools-latest-linux.zip](https://dl.google.com/android/repository/platform-tools-latest-linux.zip) <br>
 
 #### 2. Add ADB to the Environment Variable
 
@@ -68,7 +68,7 @@ MAX_TOKENS: 300  # The max token limit for the response completion
 TEMPERATURE: 0.0  # The temperature of the model: the lower the value, the more consistent the output of the model
 REQUEST_INTERVAL: 5  # Time in seconds between consecutive GPT-4V requests
 
-DEVICE_IP: ip:5555 # Your device ip
+DEVICE_IP: <ip>:5555 # Your device ip
 APP_MAPPING_FILE: "configs/app2package_CN.yaml" # The path of the app mapping file
 
 ```

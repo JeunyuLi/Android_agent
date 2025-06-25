@@ -18,7 +18,6 @@ DOC_REFINE: false  # Set this to true will make the agent refine existing docume
 MAX_ROUNDS: 10  # Set the round limit for the agent to complete the task
 DARK_MODE: false  # Set this to true if your app is in dark mode to enhance the element labeling
 MIN_DIST: 30  # The minimum distance between elements to prevent overlapping during the labeling proces15
-DEVICE_IP: 10.39.52.43:5555
-#DEVICE_IP: 192.168.100.9:5555
+DEVICE_IP: <ip>:5555
 
-APP_MAPPING_FILE: "configs/app2package.yaml"
+APP_MAPPING_FILE: "configs/app2package_CN.yaml"
